@@ -1,6 +1,5 @@
 import re
 import os
-import sys
 import glob
 from pathlib import Path
 from fontTools.ttLib import TTFont
@@ -95,16 +94,16 @@ def find_all_wording(data_dir, unicode_map):
     return result
 
 
-def main():
-    client = sys.argv[1]
+def main(args):
+    client = args.lang
     font_lang = client[-2:]
-    unicode_map = get_supported_chars(Path('fonts/SubsetOTF') / font_lang)
+    unicode_map = get_supported_chars(Path(args.font_dir) / font_lang)
     wording = find_all_wording(
-        os.path.join('ArknightsGameData', client, 'gamedata', 'excel'),
+        os.path.join(args.gamedata_dir, client, 'gamedata', 'excel'),
         unicode_map,
     )
     wording.update(set([chr(x) for x in range(33, 127)]))
-    output_dir = os.path.join('output', client)
+    output_dir = os.path.join(args.output_dir, client)
     os.makedirs(output_dir, exist_ok=True)
 
     all_context = '\n'.join(wording)
@@ -144,4 +143,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)
