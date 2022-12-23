@@ -44,7 +44,7 @@ tar -xvf $pretrained_model/korean_PP-OCRv3_rec_train.tar -C $pretrained_model
 yes | unzip fonts/SourceHanSans$fontLang.zip -d $fonts_dir
 ls $PWD/$fonts_dir/SubsetOTF/$fontLang/* > $fonts_dir/fonts.txt
 
-python3 ./utils/wording.py $client
+python3 ./utils/wording.py -l $client
 python3 ./utils/number.py -l $client
 
 num_img_fraction=`expr $num_img / 100`
