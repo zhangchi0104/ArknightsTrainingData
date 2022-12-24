@@ -1,84 +1,96 @@
+from glob import glob
 import os
-import sys
-from collections import defaultdict
+from pathlib import Path
+import argparse as A
 
 
-def as_line(input_dir, output_file):
-    txt_context = ''
-    for path, _, file_list in os.walk(input_dir):
-        for file_name in file_list:
-            if not (file_name.endswith('.png') or file_name.endswith('.jpg') or file_name.endswith('.bmp')):
-                continue
-            full_path = os.path.join(path, file_name)
-            stem = file_name[:-4]
-            txt_context += full_path + '\t' + stem + '\n'
+def extract_labels_from_txt(txt_file: Path) -> list:
+    parent = txt_file.parent
+    with open(txt_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        prefix = parent.as_posix()
+        if not prefix.endswith('/'):
+            prefix += '/'
 
-    txt_context = txt_context.replace('\\', '/')
-    with open(output_file, mode='w', encoding='utf-8') as fd:
-        fd.write(txt_context)
+        lines = [f"{prefix}{line[:8]}.jpg\t{line[9:]}" for line in lines]
+        return lines
 
 
-def as_array(input_dir, output_file, offline_path=None, offline_prefix=None):
-    text_set = defaultdict(list)
-    for path, _, file_list in os.walk(input_dir):
-        for file_name in file_list:
-            if not file_name.endswith('.png'):
-                continue
-            full_path = os.path.join(path, file_name)
-            stem = file_name[:-len('.png')]
-            text_set[stem].append(full_path)
-
-    if offline_path and offline_prefix:
-        with open(offline_path, mode='r', encoding='utf-8') as fd:
-            for l in fd.readlines():
-                pos = l.find(' ')
-                full_path = offline_prefix + l[:pos] + ".jpg"
-                stem = l[pos+1:-1]
-                text_set[stem].append(full_path)
-
-    txt_context = ''
-    for name, imgs in text_set.items():
-        line = '['
-        for i in imgs:
-            line += f'"{i}", '
-        line = line[:-2] + "]"
-        line += '\t' + name + '\n'
-        txt_context += line
-
-    txt_context = txt_context.replace('\\', '/')
-    with open(output_file, mode='w', encoding='utf-8') as fd:
-        fd.write(txt_context)
+def extract_labels_from_filenames(data_dir: Path) -> list:
+    if not data_dir.exists() or not data_dir.is_dir():
+        return []
+    all_imgs = [
+        *list(data_dir.rglob("**/*.png")),
+        *list(data_dir.rglob("**/*.jpg")),
+        *list(data_dir.rglob("**/*.jpeg")),
+        *list(data_dir.rglob("**/*.bmp")),
+    ]
+    res = [f"{Path(img).as_posix()}\t{Path(img).stem}\n" for img in all_imgs]
+    return res
 
 
-def restruct_render(input_file, output_file):
-    txt_context = ''
-    with open(input_file, mode='r', encoding='utf-8') as fd:
-        for l in fd.readlines():
-            txt_context += os.path.dirname(input_file) + \
-                "/" + l.replace(' ', '.jpg\t')
+def main(args):
+    data_root: Path = args.data_root / args.lang
+    output_dir: Path = args.output_dir / args.lang
+    train_mappings = glob(str(data_root / '**' / 'train.txt'), recursive=True)
+    test_mappings = glob(str(data_root / '**' / 'test.txt'), recursive=True)
+    train_lines = []
+    test_lines = []
 
-    txt_context = txt_context.replace('\\', '/')
+    for mapping in train_mappings:
+        train_lines += extract_labels_from_txt(Path(mapping))
 
-    with open(output_file, mode='a', encoding='utf-8') as fd:
-        fd.write(txt_context)
+    for mapping in test_mappings:
+        test_lines += extract_labels_from_txt(Path(mapping))
+
+    if args.extra_data:
+        train_lines += extract_labels_from_filenames(args.extra_data /
+                                                     args.lang / 'train')
+        test_lines += extract_labels_from_filenames(args.extra_data /
+                                                    args.lang / 'test')
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / 'rec_gt_train.txt', 'w', encoding='utf-8') as f:
+        f.writelines(train_lines)
+
+    with open(output_dir / 'rec_gt_test.txt', 'w', encoding='utf-8') as f:
+        f.writelines(test_lines)
 
 
-input_dir = sys.argv[1]
-output_dir = sys.argv[2]
-region = sys.argv[3]
+def parse_args():
+    parser = A.ArgumentParser()
+    parser.add_argument(
+        "--data_root",
+        "-d",
+        type=Path,
+        default=Path(os.path.join('.', 'output', 'render')),
+        help="Path to the root of the data",
+    )
+    parser.add_argument(
+        "--output_dir",
+        "-o",
+        type=Path,
+        default=Path(os.path.join(".", "output")),
+        help="Path to the output directory",
+    )
+    parser.add_argument(
+        "--extra_data",
+        "-e",
+        type=Path,
+        default="my_data",
+        help="Path to the extra data",
+    )
+    parser.add_argument(
+        "--lang",
+        "-l",
+        type=str,
+        choices=["zh_CN", "en_US", "ja_JP", "ko_KR", "zh_TW"],
+        default="zh_CN",
+        help="Language of the data",
+    )
+    return parser.parse_args()
 
-output_train_file = os.path.join(output_dir, 'rec_gt_train.txt')
-output_test_file = os.path.join(output_dir, 'rec_gt_test.txt')
 
-if os.path.exists(os.path.join('./my_data', region, 'train')):
-    as_line(os.path.join('./my_data', region, 'train'), output_train_file)
-
-if os.path.exists(os.path.join('./my_data', region, 'test')):
-    as_line(os.path.join('./my_data', region, 'test'), output_test_file)
-
-for path, _, files in os.walk(input_dir):
-    for f in files:
-        if f == 'train.txt':
-            restruct_render(os.path.join(path, f), output_train_file)
-        elif f == 'test.txt':
-            restruct_render(os.path.join(path, f), output_test_file)
+if __name__ == "__main__":
+    args = parse_args()
+    main(args)

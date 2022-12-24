@@ -61,4 +61,4 @@ python3 ./utils/train_test_split.py $output/$client/short/default/tmp_labels.txt
 python3 ./utils/train_test_split.py $output/$client/long/default/tmp_labels.txt -o $output/$client/long/default
 python3 ./utils/train_test_split.py $output/$client/number/default/tmp_labels.txt -o $output/$client/number/default
 
-python3 ./utils/rename_for_ppocr.py ./output/render/$client ./output/$client $client
+python3 ./utils/rename_for_ppocr.py -d ./output/render/$client -o ./output/$client -l $client
